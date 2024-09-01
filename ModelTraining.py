@@ -1,8 +1,5 @@
-import gradio as gr
 import pandas as pd
 import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import OrdinalEncoder
@@ -21,19 +18,21 @@ df = pd.read_csv('gemstone.csv')
 df=df.drop(labels=['id'],axis=1)
 X = df.drop(labels=['price'],axis=1)
 Y = df[['price']]
+
 categorical_cols = X.select_dtypes(include='object').columns
 numerical_cols = X.select_dtypes(exclude='object').columns
+
 cut_categories = ['Fair', 'Good', 'Very Good','Premium','Ideal']
 color_categories = ['D', 'E', 'F', 'G', 'H', 'I', 'J']
 clarity_categories = ['I1','SI2','SI1','VS2','VS1','VVS2','VVS1','IF']
-# Numerical Pipeline
+
 num_pipeline=Pipeline(
     steps=[
     ('imputer',SimpleImputer(strategy='median')),
     ('scaler',StandardScaler())
     ]
 )
-# Categorigal Pipeline
+
 cat_pipeline=Pipeline(
     steps=[
     ('imputer',SimpleImputer(strategy='most_frequent')),
@@ -41,63 +40,59 @@ cat_pipeline=Pipeline(
     ('scaler',StandardScaler())
     ]
 )
+
 preprocessor=ColumnTransformer([
     ('num_pipeline',num_pipeline,numerical_cols),
     ('cat_pipeline',cat_pipeline,categorical_cols)
     ]
 )
 
-# Train test split
 X_train,X_test,y_train,y_test=train_test_split(X,Y,test_size=0.30,random_state=30)
 
 X_train=pd.DataFrame(preprocessor.fit_transform(X_train),columns=preprocessor.get_feature_names_out())
 X_test=pd.DataFrame(preprocessor.transform(X_test),columns=preprocessor.get_feature_names_out())
 
-imputer = SimpleImputer(strategy='median')
+def evaluate_model(true, predicted):
+    mae = mean_absolute_error(true, predicted)
+    mse = mean_squared_error(true, predicted)
+    rmse = np.sqrt(mean_squared_error(true, predicted))
+    r2_square = r2_score(true, predicted)
+    return mae, rmse, r2_square
 
-y_train = imputer.fit_transform(y_train)
-y_test = imputer.transform(y_test)
 
-randomforestregressor=RandomForestRegressor()
-randomforestregressor.fit(X_train,y_train)
+models={
+    'LinearRegression':LinearRegression(),
+    'Lasso':Lasso(),
+    'Ridge':Ridge(),
+    'ElasticNet':ElasticNet(),
+    'DecisionTreeRegressor':DecisionTreeRegressor(),
+    'SVR':SVR(),
+    'RandomForestRegressor':RandomForestRegressor()
+}
+trained_model_list=[]
+model_list=[]
+r2_list=[]
 
-def predict_price(carat, cut, color, clarity, depth, table, x, y, z):
-    data = {
-        'carat': [carat],
-        'depth': [depth],
-        'table': [table],
-        'x': [x],
-        'y': [y],
-        'z': [z],
-        'cut': [cut],
-        'color': [color],
-        'clarity': [clarity]
-    }
+for i in range(len(list(models))):
+    model=list(models.values())[i]
+    model.fit(X_train,y_train)
 
-    data_df = pd.DataFrame(data)
+    #Make Predictions
+    y_pred=model.predict(X_test)
 
-    processed_data = preprocessor.transform(data_df)
+    mae, rmse, r2_square=evaluate_model(y_test,y_pred)
 
-    price_prediction = randomforestregressor.predict(processed_data)
-    return price_prediction[0]
+    print(list(models.keys())[i])
+    model_list.append(list(models.keys())[i])
 
-iface = gr.Interface(
-    fn=predict_price,
-    inputs=[
-        gr.Number(label="Carat"),
-        gr.Dropdown(choices=['Fair', 'Good', 'Very Good','Premium','Ideal'], label="Cut"),
-        gr.Dropdown(choices=['D', 'E', 'F', 'G', 'H', 'I', 'J'], label="Color"),
-        gr.Dropdown(choices=['I1','SI2','SI1','VS2','VS1','VVS2','VVS1','IF'], label="Clarity"),
-        gr.Number(label="Depth"),
-        gr.Number(label="Table"),
-        gr.Number(label="X"),
-        gr.Number(label="Y"),
-        gr.Number(label="Z")        
-    ],
-    outputs="number",
-    title="Diamond Price Prediction",
-    description="Enter Diamond Characteristics to Predict its Price"
-)
+    print('Model Training Performance')
+    print("RMSE:",rmse)
+    print("MAE:",mae)
+    print("R2 score",r2_square*100)
 
-iface.launch()
+    r2_list.append(r2_square)
+    
+    print('='*35)
+    print('\n')
 
+model_list
